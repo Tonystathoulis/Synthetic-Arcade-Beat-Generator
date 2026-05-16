@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  Algorithmic Beat Generator Client
+  - This HTML file provides the user interface for generating beats.
+  - It interacts with the Flask server (server.py) to request new beats.
+  - The sidebar shows beat history, and the main area allows style selection and playback.
+  - The footer contains the GitHub link.
+-->
+<head>
+<meta charset="UTF-8" />
+<title>Algorithmic Beat Generator</title>
+<style>
+  :root{
+    --pink: #fbb6fc;
+    --black: #000000;
+  }
+  html,body{
+    height:100%;
+    margin:0;
+  }
+  body{
+    margin:0;
+    font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;
+    background-color: var(--pink);
+    color: var(--black);
+    display:flex;
+    height:100vh;
+    overflow:hidden;
+    border:6px solid var(--black);
+    box-sizing:border-box;
+    position:relative;
+  }
+
+  /* Sidebar (Beat History) */
+  #sidebar{
+    width:220px;
+    background: var(--black);
+    color: var(--pink);
+    overflow-y:auto;
+    padding:12px;
+    box-sizing:border-box;
+  }
+  #sidebar h2{ margin:6px 0 12px; font-size:16px; text-align:center; color:var(--pink) }
+
+  .beat-item{
+    padding:8px;
+    cursor:pointer;
+    border-bottom:1px solid var(--pink);
+    color: var(--pink);
+    background: transparent;
+    transition: background .12s, color .12s;
+  }
+  .beat-item:hover{ background: var(--pink); color:var(--black) }
+
+  /* Main area */
+  #main{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+    box-sizing:border-box;
+  }
+
+  #beat-name{ font-size:22px; margin-bottom:12px; font-weight:600; text-transform:capitalize }
+
+  #player-container{ width:80%; max-width:720px; display:flex; flex-direction:column; align-items:center; }
+
+  #controls{
+    display:flex;
+    align-items:center;
+    gap:14px;
+  }
+
+  /* Round Buttons */
+  #playpause, #download, #info-btn{
+    width:56px;
+    height:56px;
+    border-radius:50%;
+    background:var(--black);
+    color:var(--pink);
+    border:none;
+    cursor:pointer;
+    font-size:20px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.15);
+    transition:transform .1s ease;
+  }
+  #playpause:active, #download:active, #info-btn:active{
+    transform:scale(0.92);
+  }
+
+  #time-display{
+    font-size:14px;
+    color:var(--black);
+    min-width:95px;
+    text-align:center;
+  }
+
+  /* Progress bar */
+  #progress-container{
+    width:100%;
+    height:12px;
+    background:#ffffff;
+    border-radius:8px;
+    overflow:hidden;
+    margin-top:14px;
+    cursor:pointer;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.06);
+  }
+  #progress{
+    height:100%;
+    width:0%;
+    background:var(--black);
+    transition: width 0.06s linear;
+  }
+
+  /* Generate button */
+  #generate{
+    margin-top:20px;
+    padding:12px 22px;
+    background:var(--black);
+    color:var(--pink);
+     box-shadow: 0 6px 18px rgba(0,0,0,0.15);
+    border:none;
+    border-radius:10px;
+    cursor:pointer;
+    font-size:16px;
+  }
+  #generate[disabled]{ opacity:0.5; cursor:not-allowed }
+
+  /* Soundwave full width */
+  #soundwave{
+    position:absolute;
+    bottom:0;
+    left:0;
+    width:100%;
+    height:90px;
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:3px;
+    pointer-events:none;
+    opacity:10;
+    transition:opacity 0.5s ease;
+    padding:0 6px;
+    box-sizing:border-box;
+  }
+
+  .bar{
+    flex:1;
+    background:var(--black);
+    border-radius:3px;
+    margin:0 1px;
+    animation: bounce 1.2s infinite ease-in-out;
+    transform-origin:bottom;
+  }
+
+  @keyframes bounce {
+    0%, 100% { height:10%; opacity:0.7; }
+    50% { height:70%; opacity:1; }
+  }
+
+  /* Info button + tooltip */
+  #info-btn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+  }
+ #info-tooltip {
+  position: absolute;
+  top: 80px;
+  right: 20px;
+  background: var(--pink);
+  color: var(--black);
+  padding: 12px 16px;
+  border-radius: 10px;
+  width: 220px;
+  font-size: 14px;
+  line-height: 1.4em;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+  #info-btn:hover + #info-tooltip {
+    opacity: 1;
+  }
+
+  @media (max-width:800px){
+    #sidebar{ display:none }
+    #player-container{ width:95% }
+  }
+</style>
+</head>
+<body>
+  <div id="sidebar">
+    <h2>Beat History</h2>
+    <div id="beat-list"></div>
+  </div>
+
+  <div id="main">
+    <div id="beat-name">No Beat Generated</div>
+
+    <div id="player-container">
+      <div id="controls">
+        <button id="playpause" title="Play / Pause">▶</button>
+        <div id="time-display">0:00 / 0:00</div>
+        <button id="download" title="Download WAV" disabled>
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 16l4-5h-3V4h-2v7H8l4 5zM5 18v2h14v-2H5z"/>
+          </svg>
+        </button>
+      </div>
+
+      <div id="progress-container" aria-label="Progress bar">
+        <div id="progress"></div>
+      </div>
+
+      <audio id="player" preload="auto"></audio>
+    </div>
+
+    <button id="generate">Generate Beat</button>
+  </div>
+
+  <!-- Soundwave -->
+  <div id="soundwave"></div>
+
+  <!-- Info Button -->
+  <button id="info-btn">
+    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M20 2H4C2.9 2 2 2.9 2 4v14l4-4h14c1.1 0 2-.9 2-2V4C22 2.9 21.1 2 20 2z"/>
+    </svg>
+  </button>
+  <div id="info-tooltip">This web app generates unique beats on demand by algorithmically composing drum patterns, melodies, and harmonies with randomized parameters on the server, then instantly rendering and playing the resulting audio directly in your browser!</div>
+
+<script>
+let beatCounters = { synthetic: 0, arcade: 0 };
+let isGenerating = false;
+let currentBeat = { name: null, blob: null };
+
+const player = document.getElementById('player');
+const playpause = document.getElementById('playpause');
+const progress = document.getElementById('progress');
+const progressContainer = document.getElementById('progress-container');
+const timeDisplay = document.getElementById('time-display');
+const beatNameElem = document.getElementById('beat-name');
+const beatListElem = document.getElementById('beat-list');
+const generateBtn = document.getElementById('generate');
+const soundwave = document.getElementById('soundwave');
+const downloadBtn = document.getElementById('download');
+
+function fmtTime(t){
+  if (!isFinite(t)) return '0:00';
+  const m = Math.floor(t/60);
+  const s = Math.floor(t%60).toString().padStart(2,'0');
+  return `${m}:${s}`;
+}
+
+/* Soundwave bars */
+function spawnSoundwave(){
+  soundwave.innerHTML = '';
+  const barCount = 100;
+  for(let i=0;i<barCount;i++){
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+    bar.style.animationDelay = `${(Math.random() * 1.2).toFixed(2)}s`;
+    soundwave.appendChild(bar);
+  }
+}
+function showSoundwave(show){ soundwave.style.opacity = show ? '1' : '0'; }
+
+/* UI Progress */
+function updateProgressUI(){
+  if (player.duration && !isNaN(player.duration)){
+    const pct = (player.currentTime / player.duration) * 100;
+    progress.style.width = Math.max(0, Math.min(100, pct)) + '%';
+    timeDisplay.textContent = `${fmtTime(player.currentTime)} / ${fmtTime(player.duration)}`;
+  } else {
+    timeDisplay.textContent = `0:00 / 0:00`;
+    progress.style.width = '0%';
+  }
+  requestAnimationFrame(updateProgressUI);
+}
+requestAnimationFrame(updateProgressUI);
+
+/* Controls */
+playpause.addEventListener('click', () => {
+  if (!player.src) return;
+  if (player.paused) player.play(); else player.pause();
+});
+player.addEventListener('play', () => { playpause.textContent = '❚❚'; showSoundwave(true); });
+player.addEventListener('pause', () => { playpause.textContent = '▶'; showSoundwave(false); });
+player.addEventListener('ended', () => { playpause.textContent = '▶'; showSoundwave(false); });
+
+progressContainer.addEventListener('click', (e) => {
+  if (!player.duration) return;
+  const rect = progressContainer.getBoundingClientRect();
+  const px = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+  const pct = px / rect.width;
+  player.currentTime = pct * player.duration;
+});
+
+/* Beat History */
+function addHistoryItem(name, blob){
+  const div = document.createElement('div');
+  div.className = 'beat-item';
+  div.textContent = name;
+  div.onclick = () => {
+    const url = URL.createObjectURL(blob);
+    loadBeatIntoPlayer(name, url, blob);
+  };
+  beatListElem.prepend(div);
+}
+
+/* Load beat */
+function loadBeatIntoPlayer(name, url, blob){
+  player.src = url;
+  beatNameElem.textContent = name;
+  currentBeat = { name, blob };
+  player.play().catch(()=>{});
+  spawnSoundwave();
+  showSoundwave(true);
+  downloadBtn.disabled = false;
+}
+
+/* Download WAV */
+downloadBtn.addEventListener('click', () => {
+  if (!currentBeat.blob) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(currentBeat.blob);
+  a.download = currentBeat.name.replace(/\s+/g,'_') + '.wav';
+  a.click();
+});
+
+/* Generate Beat */
+generateBtn.addEventListener('click', async () => {
+  if (isGenerating) return;
+  isGenerating = true;
+  generateBtn.disabled = true;
+  generateBtn.textContent = 'Generating...';
+
+  try {
+    const style = Math.random() > 0.5 ? 'synthetic' : 'arcade';
+    const prev = currentBeat.blob ? { name: currentBeat.name, blob: currentBeat.blob } : null;
+
+    const res = await fetch(`/generate-beat?style=${encodeURIComponent(style)}`);
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    const blob = await res.blob();
+
+    beatCounters[style] = (beatCounters[style] || 0) + 1;
+    const name = `${style.charAt(0).toUpperCase() + style.slice(1)} Beat #${beatCounters[style]}`;
+
+    if (prev && !Array.from(beatListElem.children).some(el => el.textContent === prev.name)) {
+      addHistoryItem(prev.name, prev.blob);
+    }
+
+    const url = URL.createObjectURL(blob);
+    loadBeatIntoPlayer(name, url, blob);
+
+    if (!Array.from(beatListElem.children).some(el => el.textContent === name)) {
+      addHistoryItem(name, blob);
+    }
+
+  } catch (err) {
+    console.error('Generate error', err);
+    alert('Error generating beat: ' + (err.message || err));
+  } finally {
+    isGenerating = false;
+    generateBtn.disabled = false;
+    generateBtn.textContent = 'Generate Beat';
+  }
+});
+
+/* Keyboard shortcut */
+document.body.addEventListener('keyup', (e) => {
+  if (e.code === 'Space' && document.activeElement === document.body){
+    if (!player.src) return;
+    if (player.paused) player.play(); else player.pause();
+  }
+});
+</script>
+</body>
+<!-- Footer with GitHub link -->
+<footer style="width:100%;text-align:center;padding:10px 0;background:rgba(0,0,0,0.05);font-size:14px;position:fixed;bottom:0;left:0;z-index:1000;">
+  <a href="https://github.com/Tonystathoulis" target="_blank" style="color:#000;text-decoration:none;">github.com/Tonystathoulis</a>
+</footer>
+</html>
