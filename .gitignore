@@ -216,3 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project dependencies / binaries
+SDL3-3.2.20/
+fluidsynth-v2.5.0-win10-x64-cpp11/
+fluidsynth-v2.5.0-win10-x64-glib/
+
+# Optional large/generated files
+*.sf2
